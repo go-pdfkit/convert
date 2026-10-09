@@ -1,0 +1,6 @@
+# Binaries. One was committed into another repository here on its FIRST commit
+# and had to be taken back out; this file goes in before any code does.
+/pdfconv
+/convert
+*.test
+*.out
