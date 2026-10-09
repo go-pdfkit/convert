@@ -148,9 +148,14 @@ func ReadersToPDF(rs []io.Reader, opt Options) ([]byte, error) {
 	if len(rs) == 0 {
 		return nil, fmt.Errorf("no pictures: a PDF of no pages is not a conversion")
 	}
+	// ⛔ opt.MaxPixels is applied HERE, where the picture is read, and not only
+	// in ToPDF where it used to be. ToPDF sees a picture that has already been
+	// decoded, so a ceiling checked there reports a buffer the process is
+	// already holding: a 75-byte PNG claiming 10000x10000 allocated 381.6 MiB
+	// with MaxPixels: 1000 set, and was then politely refused.
 	ms := make([]image.Image, 0, len(rs))
 	for i, r := range rs {
-		m, _, err := Decode(r)
+		m, _, err := decodeWithin(r, opt.MaxPixels)
 		if err != nil {
 			return nil, fmt.Errorf("picture %d: %w", i+1, err)
 		}
