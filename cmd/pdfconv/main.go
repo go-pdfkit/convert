@@ -49,6 +49,12 @@ func runTo(args []string, out, errw io.Writer) error {
 		return fromPDF(args[1:], out, errw)
 	case "redraw":
 		return redraw(args[1:], out, errw)
+	case "from-archive":
+		return fromArchive(args[1:], out, errw)
+	case "to-archive":
+		return toArchive(args[1:], out, errw)
+	case "bundle":
+		return bundle(args[1:], out, errw)
 	case "formats":
 		fmt.Fprintln(out, "read :", strings.Join([]string{"png", "jpeg", "gif", "bmp", "tiff", "webp"}, ", "))
 		fmt.Fprintln(out, "write:", strings.Join(convert.Encoders(), ", "))
@@ -75,9 +81,18 @@ pdfconv — pictures to a PDF, and a PDF back to pictures.
   redraw    draw each page, change the pixels, and lay them back in a PDF
               pdfconv redraw [-greyscale] [-invert] [-brightness n] [-contrast n]
                              [-background #rrggbb] [-scanner] [-dpi n] <in.pdf> <out.pdf>
+  from-archive  a ZIP or CBZ of pictures onto pages, in the order their
+                NAMES put them — page10 after page2, not before it
+                  pdfconv from-archive [-dpi n] [-page a4] <in.cbz> <out.pdf>
+  to-archive    draw each page and zip them, named so they come back in order,
+                with the ComicInfo.xml a comic reader shelves a book by
+                  pdfconv to-archive [-dpi n] [-format png] [-title s] <in.pdf> <out.cbz>
+  bundle        pack whole files into a zip, UNCHANGED — no conversion at all
+                  pdfconv bundle <out.zip> <file> [file …]
   formats   what can be read, what can be written, and the paper sizes
 
-The format of a picture is read from its CONTENT, never from its name.
+The format of a picture is read from its CONTENT, never from its name — an
+SVG given to to-pdf is recognised and DRAWN at the chosen dpi.
 
 ⛔ redraw RASTERISES. What comes out has no text in it: no selection, no
 search, no copy, no screen reader, and a much larger file. Rotating, cropping,
@@ -151,7 +166,23 @@ type readerNamed struct {
 func readAll(rs []readerNamed, opt convert.Options) ([]byte, error) {
 	ms := make([]image.Image, 0, len(rs))
 	for _, r := range rs {
-		m, _, err := convert.Decode(r.f)
+		b, err := io.ReadAll(r.f)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", r.name, err)
+		}
+		// ⛔ An SVG is a picture, and it is recognised by its CONTENT like
+		// every other format here — not by its name. It is drawn rather than
+		// translated: see convert.SVGToPDF for why a half-done vector-to-vector
+		// translation is worse than an honest rasterisation.
+		if convert.LooksLikeSVG(b) {
+			m, err := convert.RasterizeSVG(b, opt)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", r.name, err)
+			}
+			ms = append(ms, m)
+			continue
+		}
+		m, _, err := convert.DecodeBytes(b)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", r.name, err)
 		}
