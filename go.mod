@@ -1,8 +1,10 @@
 module github.com/go-pdfkit/convert
 
-go 1.27.1
+go 1.27.2
 
 require (
+	github.com/go-gfx/gfx v0.35.0
+	github.com/go-images/images v0.1.0
 	github.com/go-pdfkit/pdfkit v0.14.0
 	github.com/go-pdfkit/reader v0.7.0
 	github.com/go-pdfkit/render v0.67.2
@@ -15,10 +17,8 @@ require (
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/go-crdt/collab v0.74.0 // indirect
 	github.com/go-crdt/crdt v0.55.0 // indirect
-	github.com/go-gfx/gfx v0.35.0 // indirect
 	github.com/go-icons/iconoir v0.2.0 // indirect
 	github.com/go-images/gif v0.2.0 // indirect
-	github.com/go-images/images v0.1.0 // indirect
 	github.com/go-images/jpeg v0.3.0 // indirect
 	github.com/go-images/jpeg2000 v0.13.3 // indirect
 	github.com/go-images/png v0.2.0 // indirect
@@ -34,7 +34,7 @@ require (
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
 	github.com/sergeymakinen/go-ico v1.0.0 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
