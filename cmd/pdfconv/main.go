@@ -47,6 +47,8 @@ func runTo(args []string, out, errw io.Writer) error {
 		return toPDF(args[1:], out, errw)
 	case "from-pdf":
 		return fromPDF(args[1:], out, errw)
+	case "redraw":
+		return redraw(args[1:], out, errw)
 	case "formats":
 		fmt.Fprintln(out, "read :", strings.Join([]string{"png", "jpeg", "gif", "bmp", "tiff", "webp"}, ", "))
 		fmt.Fprintln(out, "write:", strings.Join(convert.Encoders(), ", "))
@@ -70,9 +72,16 @@ pdfconv — pictures to a PDF, and a PDF back to pictures.
               pdfconv to-pdf [-dpi n] [-page a4] [-margin pt] [-title s] -o <out.pdf> <in> [in …]
   from-pdf  draw each page and write it out
               pdfconv from-pdf [-dpi n] [-format png] [-pages 1-3] [-quality n] [-password p] -o <dir> <in.pdf>
+  redraw    draw each page, change the pixels, and lay them back in a PDF
+              pdfconv redraw [-greyscale] [-invert] [-brightness n] [-contrast n]
+                             [-background #rrggbb] [-scanner] [-dpi n] <in.pdf> <out.pdf>
   formats   what can be read, what can be written, and the paper sizes
 
 The format of a picture is read from its CONTENT, never from its name.
+
+⛔ redraw RASTERISES. What comes out has no text in it: no selection, no
+search, no copy, no screen reader, and a much larger file. Rotating, cropping,
+stamping and reordering keep the text — those live in pdfops, not here.
 `)
 }
 

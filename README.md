@@ -1,11 +1,13 @@
 # convert
 
-**Pictures into a PDF, and a PDF back into pictures.** Pure Go, CGO-free,
-including `GOOS=js`.
+**Pictures into a PDF, a PDF back into pictures, and a PDF redrawn.** Pure Go,
+CGO-free, including `GOOS=js`.
 
 ```sh
 pdfconv to-pdf   -dpi 300 -o scan.pdf page1.jpg page2.jpg page3.jpg
 pdfconv from-pdf -dpi 150 -format png -pages 1,4-6 -o ./pages scan.pdf
+pdfconv redraw   -greyscale -invert out.pdf grey.pdf
+pdfconv redraw   -scanner -skew 0.6 clean.pdf looks-scanned.pdf
 pdfconv formats
 ```
 
@@ -13,6 +15,7 @@ pdfconv formats
 pdf, err := convert.ToPDF(images, convert.Options{DPI: 300})
 err = convert.WriteTo(f, images, convert.Options{DPI: 300, Page: pdfkit.A4})
 pages, err := convert.FromPDF(pdf, convert.RasterOptions{DPI: 150, Format: "png"})
+out, err := convert.Redraw(pdf, convert.RedrawOptions{Greyscale: true})
 ```
 
 ## Why it is small
@@ -20,8 +23,51 @@ pages, err := convert.FromPDF(pdf, convert.RasterOptions{DPI: 150, Format: "png"
 Both ends were already here. [`go-pdfkit/pdfkit`](https://github.com/go-pdfkit/pdfkit)
 writes a PDF and can place an image on a page;
 [`go-pdfkit/render`](https://github.com/go-pdfkit/render) draws a page into a
-raster. What was missing was the join — so this is wiring and codecs, not a new
-engine.
+raster; [`go-images/images`](https://github.com/go-images/images) already had
+`Invert`, `Grayscale`, `AdjustBrightness`, `AdjustContrast` and `Rotate`. What
+was missing was the join — so this is wiring and codecs, not a new engine.
+
+## `redraw` RASTERISES, and says so everywhere
+
+⛔ What comes out has **no text in it**: no selection, no search, no copy, no
+screen reader, and a much larger file. That is not a shortcoming — changing the
+colours a page is *painted* in means painting it — but it is a thing a caller
+has to have decided on purpose, which is why the verb is named for what it does
+rather than for what it is for.
+
+Rotating, cropping, stamping and reordering **keep** the text. Those live in
+[`go-pdfkit/ops`](https://github.com/go-pdfkit/ops), not here, and `redraw`
+with no change asked for says so on stderr before it does anything.
+
+| | |
+| --- | --- |
+| `-greyscale` | drop the colour |
+| `-invert` | turn light into dark |
+| `-brightness` | −1 (black) to 1 (white) |
+| `-contrast` | 1 leaves it, 2 doubles it, 0.5 halves it |
+| `-background` | `#rgb`, `#rrggbb` or `#rrggbbaa`, painted **by the renderer** |
+| `-scanner` | skew, grain and a worn lamp |
+
+The order of the transforms is **written down** rather than left to chance:
+colour, then tone, then the scanner's damage last. Greyscale after a contrast
+change is not the same picture as contrast after greyscale, and a caller who
+sets both would otherwise be guessing.
+
+The scanner's grain is **reproducible**: a zero `Seed` is a *fixed* seed, not a
+random one, because two runs over the same file must produce the same bytes or
+nothing downstream can be compared, cached or checksummed. ⛔ The page index is
+mixed into it, or every page of a document gets identical grain — the one thing
+a scanner never does.
+
+### Two defects this found, both invisible to a byte count
+
+| | |
+| --- | --- |
+| `-background` painted **nothing** | it was composited *under* the finished raster, and the renderer had already filled the page with opaque white. The option was documented, shipped and inert. |
+| `-brightness` changed **nothing** | `images.AdjustBrightness` adds its delta in channel units, 0–255, not in the −1..1 this option is documented in. A brightness of 0.4 added 0.4 of a level out of 255. |
+
+Both were found by tests that read **pixels**. The page count, the byte count
+and the exit status were right throughout.
 
 ## Formats
 
