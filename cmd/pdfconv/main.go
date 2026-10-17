@@ -56,7 +56,10 @@ func runTo(args []string, out, errw io.Writer) error {
 	case "bundle":
 		return bundle(args[1:], out, errw)
 	case "formats":
-		fmt.Fprintln(out, "read :", strings.Join([]string{"png", "jpeg", "gif", "bmp", "tiff", "webp"}, ", "))
+		// ⛔ DERIVED. This line used to carry the list typed out, and it would
+		// have gone on saying six formats on the day a seventh started
+		// working — which is exactly what adding PSD would have done.
+		fmt.Fprintln(out, "read :", strings.Join(convert.Readers(), ", "))
 		fmt.Fprintln(out, "write:", strings.Join(convert.Encoders(), ", "))
 		fmt.Fprintln(out, "paper:", strings.Join(convert.PageSizes(), ", "),
 			"(any with -landscape, or WIDTHxHEIGHT in points)")
