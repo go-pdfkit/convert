@@ -17,8 +17,11 @@ import (
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"
 
-	// Registered for their side effect: image.Decode consults this registry,
-	// and WebP has a decoder and no encoder.
+	// Registered for their side effect: image.Decode consults this registry.
+	// WebP has a decoder and no encoder; a PSD has a decoder and nothing
+	// anybody would call an encoder, since what is read is the flattened
+	// composite and what would have to be written is a layered document.
+	_ "github.com/go-images/psd"
 	_ "golang.org/x/image/webp"
 )
 
@@ -60,7 +63,32 @@ var aliases = map[string]string{
 // ⛔ There is no WebP encoder in pure Go. Without this table the lookup in
 // [Encoders] would simply miss, and "webp is not a format I know" is a
 // different and misleading answer from "webp can be read here but not written".
-var decodeOnly = map[string]bool{"webp": true}
+//
+// ⛔ And a PSD is not a picture anybody writes. What go-images/psd reads is the
+// flattened COMPOSITE Photoshop leaves at the end of the file; writing one
+// would mean writing a layered document, which is a different job from
+// encoding a picture and not one this package has any business doing.
+var decodeOnly = map[string]bool{"webp": true, "psd": true}
+
+// Readers names every format this package can READ, in a stable order.
+//
+// ⛔ It exists because that list was TYPED OUT in cmd/pdfconv beside the
+// registry it describes — "png, jpeg, gif, bmp, tiff, webp" — and a list typed
+// beside the thing it describes is right the day it is typed and has no way of
+// staying right: adding PSD here would have left the command line saying six
+// formats while seven worked. image.Decode's registry cannot be enumerated, so
+// one list is unavoidable; what is avoidable is two.
+func Readers() []string {
+	out := make([]string, 0, len(encoders)+len(decodeOnly))
+	for k := range encoders {
+		out = append(out, k)
+	}
+	for k := range decodeOnly {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
 
 // canonical resolves a format name the way a person typed it.
 func canonical(name string) string {

@@ -22,6 +22,8 @@ github.com/go-images/jpeg2000 v0.13.3 h1:GSnkQWQ72ANwfi/xYWt3za9Nfss+C1iBbk4uubL
 github.com/go-images/jpeg2000 v0.13.3/go.mod h1:r07D0wUJxBPZcsLTkLFt3OkL3DubrH6DsmRjJRnZYlo=
 github.com/go-images/png v0.2.0 h1:RFPkHPuRYRvrDJol/Mmn9P1DSaLV8VPmEQ8BkZoCpL0=
 github.com/go-images/png v0.2.0/go.mod h1:g1qayDmWLClHo9R5KQ+RrcUNTBcaA4c1thaIfEoS3vg=
+github.com/go-images/psd v0.1.0 h1:ckJHtqMhi/BedlUXyf+XqP2eTRzu4VdtJkPGYiqASoQ=
+github.com/go-images/psd v0.1.0/go.mod h1:cG6idFmI/QiVEWDKRQyHPU4XKJ1O6KtFunDmGWQYYyE=
 github.com/go-opentype/fonts v0.10.0 h1:9f7ik795SlBEJjz6iqBE/ZV2PaTauAj537MMWw9t4OQ=
 github.com/go-opentype/fonts v0.10.0/go.mod h1:b+o8v1zDZ6B3GixA398jGILAh09+WwfyoYz52zKe7DA=
 github.com/go-opentype/opentype v0.13.0 h1:q9K7IGDfwMP/ik51ZkwiYf6jbaqPfocvAIuojetd0UQ=

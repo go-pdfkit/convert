@@ -22,6 +22,7 @@ require (
 	github.com/go-images/jpeg v0.3.0 // indirect
 	github.com/go-images/jpeg2000 v0.13.3 // indirect
 	github.com/go-images/png v0.2.0 // indirect
+	github.com/go-images/psd v0.1.0 // indirect
 	github.com/go-opentype/fonts v0.10.0 // indirect
 	github.com/go-opentype/opentype v0.13.0 // indirect
 	github.com/go-opentype/shape v0.5.0 // indirect
