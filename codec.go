@@ -23,11 +23,13 @@ import (
 	// composite and what would have to be written is a layered document.
 	_ "github.com/go-images/psd"
 	_ "golang.org/x/image/webp"
+
+	"github.com/go-images/webp"
 )
 
-// Encoder is a picture format this package can WRITE. Reading is wider than
-// writing — WebP decodes and does not encode — so the two are separate tables
-// rather than one list with exceptions in it.
+// Encoder is a picture format this package can WRITE. Reading is still wider
+// than writing — a PSD decodes and does not encode — so the two stay separate
+// tables rather than one list with exceptions in it.
 type Encoder func(w io.Writer, m image.Image, quality int) error
 
 var encoders = map[string]Encoder{
@@ -46,6 +48,20 @@ var encoders = map[string]Encoder{
 	"tiff": func(w io.Writer, m image.Image, _ int) error {
 		return tiff.Encode(w, m, nil)
 	},
+	// ⛔ 100 MEANS LOSSLESS, and the two are different codecs rather than two
+	// settings of one. WebP's lossy form is VP8 and cannot be exact at any
+	// quality; its lossless form is VP8L and is always exact. A page of text
+	// is far smaller losslessly — on a rasterised page the lossless encoder
+	// is half the size of PNG — while a photograph is far smaller lossily, by
+	// a factor of twenty-six on the corpus the encoder was measured against.
+	// So the knob has to reach both, and the only honest place to put the
+	// boundary is the end of the range.
+	"webp": func(w io.Writer, m image.Image, q int) error {
+		if q >= 100 {
+			return webp.Encode(w, m)
+		}
+		return webp.EncodeLossy(w, m, q)
+	},
 }
 
 // aliases are the names people type. "jpg" is the same format as "jpeg" and
@@ -58,17 +74,20 @@ var aliases = map[string]string{
 }
 
 // decodeOnly are formats this package READS and cannot write. Naming them is
-// the point: a request for one has to be refused BY NAME.
+// the point: a request for one has to be refused BY NAME, since "psd is not a
+// format I know" is a different and misleading answer from "a PSD can be read
+// here but not written".
 //
-// ⛔ There is no WebP encoder in pure Go. Without this table the lookup in
-// [Encoders] would simply miss, and "webp is not a format I know" is a
-// different and misleading answer from "webp can be read here but not written".
+// ⛔ WebP WAS IN THIS TABLE, on the grounds that there was no WebP encoder in
+// pure Go. There is one now — go-images/webp — so the entry has gone and the
+// reason with it. A claim of absence in a comment outlives the absence; this
+// one was true when it was written and false by the time anybody read it.
 //
-// ⛔ And a PSD is not a picture anybody writes. What go-images/psd reads is the
+// ⛔ A PSD is not a picture anybody writes. What go-images/psd reads is the
 // flattened COMPOSITE Photoshop leaves at the end of the file; writing one
 // would mean writing a layered document, which is a different job from
 // encoding a picture and not one this package has any business doing.
-var decodeOnly = map[string]bool{"webp": true, "psd": true}
+var decodeOnly = map[string]bool{"psd": true}
 
 // Readers names every format this package can READ, in a stable order.
 //

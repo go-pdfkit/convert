@@ -22,12 +22,16 @@ type RasterOptions struct {
 	// means every page in the file's own order.
 	Pages []int
 
-	// Format is what to encode as: png, jpeg, gif, bmp or tiff. Empty means
-	// png, which is lossless and what a page of text should be.
+	// Format is what to encode as: png, jpeg, gif, bmp, tiff or webp. Empty
+	// means png, which is lossless and what a page of text should be.
 	Format string
 
-	// Quality is the JPEG quality, 1 to 100. Zero means 85. It is ignored by
-	// every other format.
+	// Quality is 1 to 100, and zero means 85. JPEG and WebP read it; every
+	// other format ignores it.
+	//
+	// ⛔ For WebP, 100 means the LOSSLESS codec rather than the finest lossy
+	// one: the two are different codecs, and a page of text wants the one
+	// that is exact.
 	Quality int
 
 	// Password opens an encrypted file.

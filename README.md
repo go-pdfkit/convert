@@ -138,14 +138,31 @@ and the exit status were right throughout.
 
 | | |
 | --- | --- |
-| **read** | PNG, JPEG, GIF (standard library); BMP, TIFF, WebP (`golang.org/x/image`) |
-| **write** | PNG, JPEG, GIF, BMP, TIFF |
+| **read** | PNG, JPEG, GIF (standard library); BMP, TIFF, WebP (`golang.org/x/image`); PSD ([go-images/psd](https://github.com/go-images/psd)) |
+| **write** | PNG, JPEG, GIF, BMP, TIFF, WebP ([go-images/webp](https://github.com/go-images/webp)) |
 
-⛔ **WebP is refused by name, not as an unknown format.** There is no WebP
-encoder in pure Go. "I do not know that format" would be a lie — it reads here
-perfectly well — and writing a PNG under a `.webp` name would be worse than
+⛔ **For WebP, quality 100 means the LOSSLESS codec**, not the finest lossy
+one. They are two different codecs — VP8L is always exact, VP8 never is — and
+which wins depends entirely on the page:
+
+| a 160×160 detailed page | a flat swatch |
+|---|---|
+| lossless 10 586 B, **lossy at 50: 886 B** | **lossless 102 B**, lossy at 50: 176 B |
+
+A VP8 frame carries a fixed header — 1 056 bits of *"every coefficient
+probability is unchanged"* alone — that a nearly empty picture can never pay
+back. So the knob has to reach both codecs, and the only honest place for the
+boundary is the end of the range. A test reads the container's FourCC
+(`VP8L` against `VP8 `, with its trailing space) rather than looking at the
+picture, because a high-quality lossy page looks like the original too.
+
+⛔ **A format that can be read and not written is refused BY NAME.** PSD is the
+one in that position now: the flattened composite reads perfectly well, and
+writing a layered document is a different job. "I do not know that format"
+would be a lie, and writing a PNG under a `.psd` name would be worse than
 either. The two refusals are different sentences and a test asserts that
-neither reads like the other.
+neither reads like the other — a test that until recently said this about
+WebP, and had to be rewritten when the encoder arrived.
 
 ⛔ **The content decides the format, never the name.** A scanner writing JPEG
 into `page.png` is ordinary; a converter that believed the extension would hand
