@@ -127,9 +127,9 @@ func toArchive(args []string, out, errw io.Writer) error {
 	fs := flag.NewFlagSet("to-archive", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	dpi := fs.Float64("dpi", 150, "dots per inch")
-	format := fs.String("format", "png", "png, jpeg, gif, bmp or tiff")
+	format := fs.String("format", "png", "png, jpeg, gif, bmp, tiff or webp")
 	pages := fs.String("pages", "", "which pages, e.g. 1,3,5-9; empty means all")
-	quality := fs.Int("quality", 85, "JPEG quality, 1-100")
+	quality := fs.Int("quality", 85, "JPEG and WebP quality, 1-100; 100 is lossless WebP")
 	password := fs.String("password", "", "password for an encrypted file")
 	title := fs.String("title", "", "the book's name, for the ComicInfo.xml a reader shelves it by")
 	if err := fs.Parse(args); err != nil {

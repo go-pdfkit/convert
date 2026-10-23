@@ -198,9 +198,11 @@ func fromPDF(args []string, out, errw io.Writer) error {
 	fs := flag.NewFlagSet("from-pdf", flag.ContinueOnError)
 	fs.SetOutput(errw)
 	dpi := fs.Float64("dpi", 150, "dots per inch")
-	format := fs.String("format", "png", "png, jpeg, gif, bmp or tiff")
+	format := fs.String("format", "png", "png, jpeg, gif, bmp, tiff or webp")
 	pages := fs.String("pages", "", "which pages, e.g. 1,3,5-9; empty means all")
-	quality := fs.Int("quality", 85, "JPEG quality, 1-100")
+	// ⛔ 100 is the LOSSLESS WebP codec, not the finest lossy one. The two are
+	// different codecs and the flag has to reach both.
+	quality := fs.Int("quality", 85, "JPEG and WebP quality, 1-100; 100 is lossless WebP")
 	password := fs.String("password", "", "password for an encrypted file")
 	outPath := fs.String("o", "", "the directory to write into")
 	if err := fs.Parse(args); err != nil {
