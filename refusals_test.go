@@ -91,8 +91,10 @@ func TestAnUnknownOutputFormatIsRefusedBeforeAnythingIsDrawn(t *testing.T) {
 	if _, err := FromPDF(pdf, RasterOptions{Format: "nonesuch"}); err == nil {
 		t.Error("an invented output format was accepted")
 	}
-	if _, err := FromPDF(pdf, RasterOptions{Format: "webp"}); err == nil {
-		t.Error("webp was accepted as something to write")
+	// A format that can be read and not written is refused too — psd, since
+	// webp became writable.
+	if _, err := FromPDF(pdf, RasterOptions{Format: "psd"}); err == nil {
+		t.Error("psd was accepted as something to write")
 	}
 }
 

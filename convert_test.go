@@ -203,16 +203,21 @@ func TestAPictureTooLargeToHoldIsRefused(t *testing.T) {
 	}
 }
 
-func TestWebPIsRefusedByNameRatherThanAsUnknown(t *testing.T) {
-	// ⛔ Two different refusals. WebP can be READ here and there is no pure-Go
-	// encoder, so "I do not know that format" would be a lie, and quietly
-	// writing a PNG under a .webp name would be worse than either.
-	_, err := encoderFor("webp")
+// ⛔ THIS TEST USED TO ASSERT THE OPPOSITE. It was called
+// TestWebPIsRefusedByNameRatherThanAsUnknown, and it was right at the time:
+// WebP could be read here and there was no pure-Go encoder, so "I do not know
+// that format" would have been a lie. go-images/webp exists now, so the thing
+// it guarded has gone — and it is rewritten rather than deleted, because what
+// it really guards is that the two refusals stay DIFFERENT.
+func TestAFormatThatCanBeReadAndNotWrittenIsRefusedByName(t *testing.T) {
+	// PSD is now the one in that position: the composite can be read, and
+	// writing a layered document is a different job.
+	_, err := encoderFor("psd")
 	if err == nil {
-		t.Fatal("webp was accepted as something to write")
+		t.Fatal("psd was accepted as something to write")
 	}
 	if !strings.Contains(err.Error(), "read") {
-		t.Errorf("webp was refused as %q, which reads like an unknown format rather than "+
+		t.Errorf("psd was refused as %q, which reads like an unknown format rather than "+
 			"one that can be read and not written", err)
 	}
 	_, err = encoderFor("nonesuch")
@@ -220,7 +225,14 @@ func TestWebPIsRefusedByNameRatherThanAsUnknown(t *testing.T) {
 		t.Fatal("an invented format was accepted")
 	}
 	if strings.Contains(err.Error(), "read here") {
-		t.Errorf("an unknown format was refused as %q, which is the message for webp", err)
+		t.Errorf("an unknown format was refused as %q, which is the message for a format "+
+			"that can be read", err)
+	}
+}
+
+func TestWebPCanBeWritten(t *testing.T) {
+	if _, err := encoderFor("webp"); err != nil {
+		t.Fatalf("webp was refused as something to write: %v", err)
 	}
 }
 
