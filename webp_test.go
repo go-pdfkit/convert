@@ -9,7 +9,11 @@ import (
 	"bytes"
 	"image"
 	"image/color"
+	"image/png"
 	"math"
+	"os"
+	osexec "os/exec"
+	"path/filepath"
 	"testing"
 
 	xwebp "golang.org/x/image/webp"
@@ -123,6 +127,74 @@ func clampTo255(v float64) float64 {
 		return 255
 	}
 	return v
+}
+
+// ⛔ THE REFERENCE DECODER JUDGES THE COLOUR, when it is installed. Every
+// other check here uses golang.org/x/image/webp, which is an independent
+// implementation in code and shares Go's convention for the luma RANGE: full
+// scale, 0..255. libwebp reads studio range, 16..235, and go-images/webp wrote
+// the wrong one for a release — so our pages came out of a browser with their
+// blacks crushed while the Go-side tests were satisfied.
+//
+// The encoder's own suite now pins the convention. This is the same question
+// asked of the whole pipeline: a page drawn from a PDF, encoded, and read back
+// by the tool browsers use.
+func TestAPageSurvivesTheReferenceDecoder(t *testing.T) {
+	dwebp, err := osexec.LookPath("dwebp")
+	if err != nil {
+		t.Skip("dwebp is not installed")
+	}
+	// A grey ramp: chrominance is constant, so only the luma scale is tested.
+	m := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	for y := 0; y < 64; y++ {
+		for x := 0; x < 64; x++ {
+			v := uint8(x * 4)
+			m.Set(x, y, color.RGBA{v, v, v, 255})
+		}
+	}
+	pdf, err := ToPDF([]image.Image{m}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages, err := FromPDF(pdf, RasterOptions{Format: "webp", Quality: 100, DPI: 72})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	in := filepath.Join(dir, "page.webp")
+	out := filepath.Join(dir, "page.png")
+	if err := os.WriteFile(in, pages[0].Data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if o, err := osexec.Command(dwebp, in, "-o", out).CombinedOutput(); err != nil {
+		t.Fatalf("the reference decoder refused the page: %v: %s", err, o)
+	}
+	f, err := os.Open(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	got, err := png.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Quality 100 is the lossless codec, so this is exact up to the raster
+	// step's own scaling — the point is that the RANGE is right, which a
+	// mismatch would show as tens of levels at the dark end.
+	for _, x := range []int{2, 10, 30, 50, 62} {
+		wantR, _, _, _ := got.At(x, 32).RGBA()
+		srcR, _, _, _ := m.At(x, 32).RGBA()
+		d := int(wantR>>8) - int(srcR>>8)
+		if d < 0 {
+			d = -d
+		}
+		if d > 6 {
+			t.Errorf("at x=%d the reference decoder gives %d and the source is %d, "+
+				"%d levels out — the luma range does not match",
+				x, wantR>>8, srcR>>8, d)
+		}
+	}
 }
 
 // webp is listed among the formats that can be written, so that anything
