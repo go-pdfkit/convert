@@ -3,7 +3,7 @@ module github.com/go-pdfkit/convert
 go 1.27.2
 
 require (
-	github.com/go-gfx/gfx v0.37.0
+	github.com/go-gfx/gfx v0.39.0
 	github.com/go-images/images v0.1.0
 	github.com/go-images/psd v0.1.0
 	github.com/go-images/webp v0.2.1

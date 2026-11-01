@@ -62,9 +62,38 @@ func TestTheDPIDecidesHowLargeADrawingIs(t *testing.T) {
 	if !near(pa[0][0], pb[0][0], 2) {
 		t.Errorf("72 dpi gave a %.0f-point page and 144 dpi gave %.0f", pa[0][0], pb[0][0])
 	}
-	if len(b) <= len(a) {
-		t.Errorf("twice the resolution produced %d bytes against %d: it drew no more pixels",
-			len(b), len(a))
+
+	// ⛔ THIS USED TO ASSERT THAT 144 DPI PRODUCED MORE BYTES, and it no longer
+	// does — which is the improvement and not a regression. SVGToPDF now keeps
+	// a document of plain paths VECTOR, and a vector drawing has no resolution
+	// for the DPI to change. The property is asserted both ways round: nothing
+	// moves on the vector path, and the pixel count still follows the DPI on
+	// the drawn one.
+	if len(a) != len(b) {
+		t.Errorf("a vector conversion changed with the DPI: %d bytes against %d", len(a), len(b))
+	}
+
+	// A gradient takes the document down the drawn path, since the vector one
+	// refuses it by name.
+	const shaded = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
+	  <defs><linearGradient id="g"><stop offset="0" stop-color="#000"/>
+	  <stop offset="1" stop-color="#fff"/></linearGradient></defs>
+	  <rect width="200" height="100" fill="url(#g)"/></svg>`
+	ra, err := SVGToPDF([]byte(shaded), Options{DPI: 72})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rb, err := SVGToPDF([]byte(shaded), Options{DPI: 144})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rb) <= len(ra) {
+		t.Errorf("on the drawn path, twice the resolution produced %d bytes against %d: it drew no more pixels",
+			len(rb), len(ra))
+	}
+	qa, qb := mediaBoxes(t, ra), mediaBoxes(t, rb)
+	if !near(qa[0][0], qb[0][0], 2) {
+		t.Errorf("the drawn page changed size with the DPI: %.0f against %.0f", qa[0][0], qb[0][0])
 	}
 }
 

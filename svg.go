@@ -5,25 +5,43 @@ package convert
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 
 	gfxsvg "github.com/go-gfx/gfx/svg"
 )
 
-// SVGToPDF draws an SVG document and lays it on a page.
+// SVGToPDF puts an SVG document on a page, KEEPING IT VECTOR where it can.
 //
-// ⛔ IT RASTERISES. An SVG is vector and so is a PDF, so a reader could
-// reasonably expect the paths to survive — and they do not. Turning one
-// vector language into another means reimplementing a renderer's worth of
-// semantics (gradients in two unit systems, clip paths, stroke joins,
-// transforms, text layout), and a half-done translation produces a file that
-// opens and is quietly wrong. Drawing it is a complete answer that is honest
-// about its own resolution.
+// The outlines become PDF path operators, so the result scales without pixels.
+// When the document uses something the translation cannot express — a
+// gradient, a clip path, an embedded raster — the whole document is DRAWN
+// instead, at [Options.DPI].
 //
-// [Options.DPI] is what that resolution is: at 72 one SVG user unit is one
-// point, and the drawing comes out the size the document says.
+// ⛔ IT USED TO RASTERISE ALWAYS, and the reason it stopped is worth keeping.
+// The old comment here said that turning one vector language into another
+// "means reimplementing a renderer's worth of semantics, and a half-done
+// translation produces a file that opens and is quietly wrong". That is still
+// true, and it is exactly what the fallback is for. What changed is that
+// go-gfx's svg.Walk now REPORTS the semantics it could not hand over, so
+// "half-done" became a condition this package can test for rather than a risk
+// it could only avoid by never trying. A document is translated whole or drawn
+// whole; there is no third outcome in which some of it survived.
+//
+// [Options.DPI] is consulted only on the drawing path, where it is the
+// resolution: at 72 one SVG user unit is one point. On the vector path it has
+// nothing to say, because the output has no resolution.
 func SVGToPDF(doc []byte, opt Options) ([]byte, error) {
+	b, err := SVGToPDFVector(doc, opt)
+	if err == nil {
+		return b, nil
+	}
+	if !errors.Is(err, ErrSVGNotVector) {
+		// Not an SVG at all, or past a ceiling: drawing it would fail for the
+		// same reason, so the refusal stands rather than being retried.
+		return nil, err
+	}
 	m, err := RasterizeSVG(doc, opt)
 	if err != nil {
 		return nil, err
