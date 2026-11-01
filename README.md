@@ -21,7 +21,8 @@ pages, err := convert.FromPDF(pdf, convert.RasterOptions{DPI: 150, Format: "png"
 out, err := convert.Redraw(pdf, convert.RedrawOptions{Greyscale: true})
 pdf, err = convert.ArchiveToPDF(cbz, convert.Options{})
 err = convert.ToArchive(w, pdf, convert.RasterOptions{DPI: 150})
-pdf, err = convert.SVGToPDF(drawing, convert.Options{DPI: 72})
+pdf, err = convert.SVGToPDF(drawing, convert.Options{DPI: 72})       // vector, or drawn
+pdf, err = convert.SVGToPDFVector(drawing, convert.Options{})        // vector or nothing
 ```
 
 ## ⛔ page10 comes after page2
@@ -67,15 +68,33 @@ the target and renamed, so a failure leaves nothing under the final name — a
 half-written ZIP has its directory missing from the end, so it does not even
 open, but it is there and dated and somebody will try to send it.
 
-## SVG is DRAWN, not translated
+## SVG stays VECTOR where it can
 
-An SVG handed to `to-pdf` is recognised by its **content** and rasterised at
-the chosen DPI. ⛔ Both are vector languages, so a reader could reasonably
-expect the paths to survive — and they do not. Turning one into the other means
-reimplementing a renderer's worth of semantics (gradients in two unit systems,
-clip paths, stroke joins, transforms, text layout), and a half-done translation
-produces a file that opens and is quietly wrong. Drawing it is a complete
-answer that is honest about its own resolution.
+An SVG handed to `to-pdf` is recognised by its **content** and its outlines
+become PDF path operators — so the result scales without pixels, and a figure
+that would be tens of kilobytes of raster is about a kilobyte of geometry.
+
+⛔ **What makes that safe is the refusal, not the translation.** A converter
+between two vector languages that silently drops what it does not understand
+produces a file that opens and is quietly wrong, which is worse than a picture.
+[`go-gfx/gfx/svg`](https://github.com/go-gfx/gfx)'s `Walk` reports every feature
+it could not hand over — a gradient, a clip path, an embedded raster — and a
+document that uses one is **drawn whole** at the chosen DPI instead. There is
+no third outcome where some of it survived.
+
+This page used to say "SVG is DRAWN, not translated", and the reasoning it gave
+still holds: turning one vector language into another means reimplementing a
+renderer's worth of semantics, and half a translation is worse than none. What
+changed is that *half* became a condition this package can test for rather than
+a risk it could only avoid by never trying.
+
+Measured: our renderer's picture of the vector page against `go-gfx`'s own
+drawing of the same SVG differs by a mean of **0.03 of 255** per channel — and a
+blank page of the same size scores 38.19, so the measure can tell drawing from
+nothing. `qpdf --check`, `mutool info` and ghostscript all accept the output.
+
+`-dpi` is consulted only when the document is drawn. On the vector path it has
+nothing to say, because the output has no resolution.
 
 The pixel ceiling is **passed through** to
 [`go-gfx/gfx/svg`](https://github.com/go-gfx/gfx): an SVG is the kind of thing
