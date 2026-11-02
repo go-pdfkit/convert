@@ -2,6 +2,8 @@ github.com/andybalholm/brotli v1.2.7 h1:UgafRPGMam5ySHfRkhthMqOFA6IFoeF3D7mWIDLj
 github.com/andybalholm/brotli v1.2.7/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/go-gfx/gfx v0.39.0 h1:dv2wgZGc1Q5D7pFM0N1hKfAcx7M+zUd4HutPva5KpBc=
 github.com/go-gfx/gfx v0.39.0/go.mod h1:4OenoKrgdht6UXYf5SV8w2tb41hfAdy4QoxJRPsRDz4=
+github.com/go-gfx/gfx v0.40.0 h1:aFnW2FZ/EqGH8i2UD+uIHCZBkt30YRPefYvDOBNmQoc=
+github.com/go-gfx/gfx v0.40.0/go.mod h1:4OenoKrgdht6UXYf5SV8w2tb41hfAdy4QoxJRPsRDz4=
 github.com/go-images/gif v0.2.0 h1:8Xl4Nan+PvyqH4wPre7wJUH61T2eJKOKonFKOdMdpkU=
 github.com/go-images/gif v0.2.0/go.mod h1:rjpP1X62GLs6pmdMxuvwBjpV4LYE4Ue6rPbeqANWHrQ=
 github.com/go-images/images v0.1.0 h1:KbbxTUpCbddpf6UsMFQetm75xsRXREyUjX0CIvd8YvE=
@@ -16,6 +18,8 @@ github.com/go-images/psd v0.1.0 h1:ckJHtqMhi/BedlUXyf+XqP2eTRzu4VdtJkPGYiqASoQ=
 github.com/go-images/psd v0.1.0/go.mod h1:cG6idFmI/QiVEWDKRQyHPU4XKJ1O6KtFunDmGWQYYyE=
 github.com/go-images/webp v0.2.1 h1:48DhaR5yVmd8vVuef9oFofCxpbOJ6LYHJIr/iHXYHzw=
 github.com/go-images/webp v0.2.1/go.mod h1:KYDIS944se7XPzH3JnclD2ZHgVCuwCTtWANdLSNBjak=
+github.com/go-ooxml/opc v0.2.1 h1:nmdBy61n4M84wLcq/6duANaebB2FOLNCwJOu2E2A87Y=
+github.com/go-ooxml/opc v0.2.1/go.mod h1:WCilIcfGDpa5sRf2uNbXFKYg7MCog6I00ahuWTWXUyw=
 github.com/go-opentype/fonts v0.14.0 h1:WHw7k9gkHT1pu9B2yyvd0FWyQqn/4NKFQoKhvMYt3Mo=
 github.com/go-opentype/fonts v0.14.0/go.mod h1:od2QcmdpKo7QCqo6Jb16y4GULk+h2Hhfq6x3xfvn62Q=
 github.com/go-opentype/opentype v0.16.1 h1:Hu2RKinqbd/WVSpRz6VrdKUPZUwPTZ4F9yx2HjZ5oCI=

@@ -3,7 +3,7 @@ module github.com/go-pdfkit/convert
 go 1.27.2
 
 require (
-	github.com/go-gfx/gfx v0.39.0
+	github.com/go-gfx/gfx v0.40.0
 	github.com/go-images/images v0.1.0
 	github.com/go-images/psd v0.1.0
 	github.com/go-images/webp v0.2.1
@@ -19,6 +19,7 @@ require (
 	github.com/go-images/jpeg v0.3.0 // indirect
 	github.com/go-images/jpeg2000 v0.14.0 // indirect
 	github.com/go-images/png v0.2.0 // indirect
+	github.com/go-ooxml/opc v0.2.1 // indirect
 	github.com/go-opentype/fonts v0.14.0 // indirect
 	github.com/go-opentype/opentype v0.16.1 // indirect
 	github.com/go-pdfkit/pdffont v0.4.0 // indirect
