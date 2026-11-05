@@ -8,7 +8,7 @@ require (
 	github.com/go-images/psd v0.1.0
 	github.com/go-images/webp v0.2.1
 	github.com/go-ooxml/opc v0.2.1
-	github.com/go-pdfkit/pdfkit v0.21.0
+	github.com/go-pdfkit/pdfkit v0.23.0
 	github.com/go-pdfkit/reader v0.10.0
 	github.com/go-pdfkit/render v0.69.1
 	golang.org/x/image v0.47.0
