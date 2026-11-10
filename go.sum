@@ -27,8 +27,8 @@ github.com/go-opentype/opentype v0.16.2-0.20261027113239-5e69589e9a5e h1:SxBkVzp
 github.com/go-opentype/opentype v0.16.2-0.20261027113239-5e69589e9a5e/go.mod h1:RujaDgR2h/ErgMkc5y/KYbX8NJtWw3yLRtVxbCfdvFQ=
 github.com/go-pdfkit/pdffont v0.4.0 h1:3CV2HnmUGHiIYuZ5dJWRLKvi7hMHGWS1RjgNYkEZ0Gk=
 github.com/go-pdfkit/pdffont v0.4.0/go.mod h1:l7es3IPbKewQF+sSgPh/bQL18jSewoI0cMjttk7uPlc=
-github.com/go-pdfkit/pdfkit v0.23.0 h1:NAEjMX/wQ8PV5Qf6aLbL84+zGpnoMp0Swep6EFA+vjw=
-github.com/go-pdfkit/pdfkit v0.23.0/go.mod h1:XF5T4lAKlfleY927itwr5ZlB2r/MfvdejVrJE9gia4E=
+github.com/go-pdfkit/pdfkit v0.24.0 h1:Fa1pKdruJlWsGYHasDjngFOKZcE+PccdGxcbUKQx3P8=
+github.com/go-pdfkit/pdfkit v0.24.0/go.mod h1:XF5T4lAKlfleY927itwr5ZlB2r/MfvdejVrJE9gia4E=
 github.com/go-pdfkit/reader v0.10.0 h1:Wi0GCUADMZFxL9iuVwxuiDhv10nGxbZZjNKJIqtj63E=
 github.com/go-pdfkit/reader v0.10.0/go.mod h1:EYHHREPKT/orDzlGiFPnPVPPuaRDLiAYezIr0cCFXaA=
 github.com/go-pdfkit/render v0.69.1 h1:t341L3Lz/2H1/yt2uZ3QUrEejdp7BVrLCa3ogc7cHSw=
@@ -45,10 +45,10 @@ github.com/sergeymakinen/go-ico v1.0.0/go.mod h1:wQ47mTczswBO5F0NoDt7O0IXgnV4Xy3
 github.com/tannevaled/gobig2 v0.2.0 h1:yx97/ltljALrIWDFVqHjPUIjAp3bfUUhH8Z8UROvNLc=
 github.com/tannevaled/gobig2 v0.2.0/go.mod h1:X0S1H+N35kg6zYgVYRqGMsGj3C35zs+iA2r1MXyPcV4=
 github.com/ulikunitz/xz v0.5.8/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
-golang.org/x/image v0.47.0 h1:za/8gVz++PPZqmZJBNSISICN5Rrj5zixP/8K++fgmqo=
-golang.org/x/image v0.47.0/go.mod h1:IkN5o4A7vq55vXN8FWjjnhg9Rs2GOtffqsSi9mWAKYE=
-golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
-golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
+golang.org/x/image v0.48.0 h1:1AvuPcuoOTJpA7s4VZ5umrb90T3So0rkB/bSGmxkxik=
+golang.org/x/image v0.48.0/go.mod h1:mmtg64iqJKGqEgy+r13dfybl85tmxUd2lMnmaiSdWYY=
+golang.org/x/sys v0.50.0 h1:dkKZEFTEKaLr1sjhs0WiKqoi8Jj5nHbS3Njmx1UoMJs=
+golang.org/x/sys v0.50.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 rsc.io/pdf v0.1.1 h1:k1MczvYDUvJBe93bYd7wrZLLUEcLZAuF824/I4e5Xr4=
 rsc.io/pdf v0.1.1/go.mod h1:n8OzWcQ6Sp37PL01nO98y4iUCRdTGarVfzxY20ICaU4=

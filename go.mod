@@ -8,10 +8,10 @@ require (
 	github.com/go-images/psd v0.1.0
 	github.com/go-images/webp v0.2.1
 	github.com/go-ooxml/opc v0.2.1
-	github.com/go-pdfkit/pdfkit v0.23.0
+	github.com/go-pdfkit/pdfkit v0.24.0
 	github.com/go-pdfkit/reader v0.10.0
 	github.com/go-pdfkit/render v0.69.1
-	golang.org/x/image v0.47.0
+	golang.org/x/image v0.48.0
 )
 
 require (
@@ -25,5 +25,5 @@ require (
 	github.com/go-pdfkit/pdffont v0.4.0 // indirect
 	github.com/go-simd/highway v0.0.14 // indirect
 	github.com/tannevaled/gobig2 v0.2.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
