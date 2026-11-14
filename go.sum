@@ -29,8 +29,8 @@ github.com/go-pdfkit/pdffont v0.4.0 h1:3CV2HnmUGHiIYuZ5dJWRLKvi7hMHGWS1RjgNYkEZ0
 github.com/go-pdfkit/pdffont v0.4.0/go.mod h1:l7es3IPbKewQF+sSgPh/bQL18jSewoI0cMjttk7uPlc=
 github.com/go-pdfkit/pdfkit v0.24.0 h1:Fa1pKdruJlWsGYHasDjngFOKZcE+PccdGxcbUKQx3P8=
 github.com/go-pdfkit/pdfkit v0.24.0/go.mod h1:XF5T4lAKlfleY927itwr5ZlB2r/MfvdejVrJE9gia4E=
-github.com/go-pdfkit/reader v0.10.0 h1:Wi0GCUADMZFxL9iuVwxuiDhv10nGxbZZjNKJIqtj63E=
-github.com/go-pdfkit/reader v0.10.0/go.mod h1:EYHHREPKT/orDzlGiFPnPVPPuaRDLiAYezIr0cCFXaA=
+github.com/go-pdfkit/reader v0.11.0 h1:eJDFA+AWvW/Yo2Y63+wIVylxsq5jFLB7cdnX9tb/1IY=
+github.com/go-pdfkit/reader v0.11.0/go.mod h1:EYHHREPKT/orDzlGiFPnPVPPuaRDLiAYezIr0cCFXaA=
 github.com/go-pdfkit/render v0.69.1 h1:t341L3Lz/2H1/yt2uZ3QUrEejdp7BVrLCa3ogc7cHSw=
 github.com/go-pdfkit/render v0.69.1/go.mod h1:VjnQZeNY5Rz4jmwSFD65KE64RHP3tEmL171H6e4KFQ8=
 github.com/go-simd/highway v0.0.14 h1:O3HPG00qgLGlrQyYBlMGyLYsuzZrqHA4+XNptPjV5gs=
