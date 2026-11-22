@@ -11,9 +11,12 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/go-pdfkit/convert"
@@ -24,7 +27,46 @@ import (
 var (
 	linkFile = os.Link
 	wrapOut  = func(w io.Writer) io.Writer { return w }
+	// notifySignals asks for SIGINT and SIGTERM on c; a test hands the channel
+	// to itself instead of signalling the test binary.
+	notifySignals = func(c chan<- os.Signal) { signal.Notify(c, os.Interrupt, syscall.SIGTERM) }
 )
+
+// tmpName is the temporary file the run is writing, shared with the goroutine
+// that cleans up on a signal. Empty until the file exists: removing "" is a
+// harmless error, so there is no "not yet" branch to get wrong.
+type tmpName struct {
+	mu sync.Mutex
+	s  string
+}
+
+func (t *tmpName) set(s string) { t.mu.Lock(); t.s = s; t.mu.Unlock() }
+func (t *tmpName) get() string  { t.mu.Lock(); defer t.mu.Unlock(); return t.s }
+
+// exitOnSignal removes the temporary file and exits with the shell's code for
+// the signal (128+2 for SIGINT, 128+15 for SIGTERM) when one arrives, and
+// stops when the returned function is called.
+//
+// ⛔ Without it an interrupted run leaves .pdfconv-*.tmp in the output
+// directory: the deferred removal in toSVG never runs when the process dies.
+func exitOnSignal(name *tmpName) (stop func()) {
+	sigc := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	notifySignals(sigc)
+	go func() {
+		select {
+		case s := <-sigc:
+			os.Remove(name.get())
+			code := 130
+			if s == syscall.SIGTERM {
+				code = 143
+			}
+			osExit(code)
+		case <-done:
+		}
+	}()
+	return func() { signal.Stop(sigc); close(done) }
+}
 
 // toSVG writes the pages of a PDF as SVG, named the way BentoPDF names them: a
 // single page is name.svg, several are name_svg.zip holding page_N.svg.
@@ -68,6 +110,8 @@ func toSVG(args []string, out, errw io.Writer) error {
 		n    int
 		size counter
 	)
+	var cur tmpName
+	defer exitOnSignal(&cur)()
 	defer func() {
 		// The temporary name always goes: on success the published name is a
 		// second link to the same file, and on failure a temporary file that
@@ -83,7 +127,7 @@ func toSVG(args []string, out, errw io.Writer) error {
 				if err := os.MkdirAll(*outDir, 0o755); err != nil {
 					return err
 				}
-				f, err := createTemp(*outDir)
+				f, err := createTemp(*outDir, &cur)
 				if err != nil {
 					return err
 				}
@@ -139,9 +183,14 @@ var tmpSeq atomic.Uint64
 // createTemp makes a file in dir that did not exist, with the mode the result
 // will keep (so no chmod can fail after the work is done), under a name no other
 // run shares: the process, the clock and a sequence.
-func createTemp(dir string) (*os.File, error) {
-	name := fmt.Sprintf(".pdfconv-%d-%d-%d.tmp", os.Getpid(), time.Now().UnixNano(), tmpSeq.Add(1))
-	return os.OpenFile(filepath.Join(dir, name), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+//
+// The name is handed to cur BEFORE the file is created, so a signal that lands
+// between the create and the return still finds it; if the create failed, the
+// name is one that does not exist and removing it is a harmless error.
+func createTemp(dir string, cur *tmpName) (*os.File, error) {
+	name := filepath.Join(dir, fmt.Sprintf(".pdfconv-%d-%d-%d.tmp", os.Getpid(), time.Now().UnixNano(), tmpSeq.Add(1)))
+	cur.set(name)
+	return os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 }
 
 // publish gives the finished temporary file its name WITHOUT replacing anything

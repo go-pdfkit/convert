@@ -247,7 +247,9 @@ func (a *SVGArchiveWriter) Add(n int, data []byte) error {
 	if a.seen[n] {
 		return fmt.Errorf("page %d is in the archive twice", n)
 	}
-	if a.sum+len(data) > MaxSVGBytes {
+	// Compared as a subtraction: a.sum+len(data) can wrap on a 32-bit int for a
+	// slice near 2 GiB, and a wrapped sum is negative, so it would pass.
+	if len(data) > MaxSVGBytes-a.sum {
 		return fmt.Errorf("the pages come to more than the %d bytes allowed", MaxSVGBytes)
 	}
 	a.seen[n] = true
