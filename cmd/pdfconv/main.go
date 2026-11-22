@@ -47,6 +47,8 @@ func runTo(args []string, out, errw io.Writer) error {
 		return toPDF(args[1:], out, errw)
 	case "from-pdf":
 		return fromPDF(args[1:], out, errw)
+	case "to-svg":
+		return toSVG(args[1:], out, errw)
 	case "redraw":
 		return redraw(args[1:], out, errw)
 	case "from-archive":
@@ -80,7 +82,10 @@ pdfconv — pictures to a PDF, and a PDF back to pictures.
   to-pdf    lay each picture on a page
               pdfconv to-pdf [-dpi n] [-page a4] [-margin pt] [-title s] -o <out.pdf> <in> [in …]
   from-pdf  draw each page and write it out
-              pdfconv from-pdf [-dpi n] [-format png] [-pages 1-3] [-quality n] [-password p] -o <dir> <in.pdf>
+              pdfconv from-pdf [-dpi n] [-format png] [-pages 1-3] [-quality n] [-password-file f] -o <dir> <in.pdf>
+  to-svg    write each page as SVG: one page is name.svg, several are
+            name_svg.zip holding page_N.svg; all or nothing
+              pdfconv to-svg [-pages 1-3] [-password-file f] [-o <dir>] <in.pdf>
   redraw    draw each page, change the pixels, and lay them back in a PDF
               pdfconv redraw [-greyscale] [-invert] [-brightness n] [-contrast n]
                              [-background #rrggbb] [-scanner] [-dpi n] <in.pdf> <out.pdf>
@@ -203,9 +208,13 @@ func fromPDF(args []string, out, errw io.Writer) error {
 	// ⛔ 100 is the LOSSLESS WebP codec, not the finest lossy one. The two are
 	// different codecs and the flag has to reach both.
 	quality := fs.Int("quality", 85, "JPEG and WebP quality, 1-100; 100 is lossless WebP")
-	password := fs.String("password", "", "password for an encrypted file")
+	getPassword := passwordFlag(fs)
 	outPath := fs.String("o", "", "the directory to write into")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	password, err := getPassword()
+	if err != nil {
 		return err
 	}
 	if *outPath == "" {
@@ -223,7 +232,7 @@ func fromPDF(args []string, out, errw io.Writer) error {
 		return err
 	}
 	ps, err := convert.FromPDF(pdf, convert.RasterOptions{
-		DPI: *dpi, Pages: want, Format: *format, Quality: *quality, Password: *password,
+		DPI: *dpi, Pages: want, Format: *format, Quality: *quality, Password: password,
 	})
 	if err != nil {
 		return err

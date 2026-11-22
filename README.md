@@ -1,11 +1,12 @@
 # convert
 
-**Pictures into a PDF, a PDF back into pictures, a PDF redrawn, and comic
+**Pictures into a PDF, a PDF back into pictures or SVG, a PDF redrawn, and comic
 archives both ways.** Pure Go, CGO-free, including `GOOS=js`.
 
 ```sh
 pdfconv to-pdf       -dpi 300 -o scan.pdf page1.jpg page2.jpg logo.svg
 pdfconv from-pdf     -dpi 150 -format png -pages 1,4-6 -o ./pages scan.pdf
+pdfconv to-svg       -pages 1-3 -o ./svg scan.pdf       # scan_svg.zip; one page: scan.svg
 pdfconv redraw       -greyscale -invert out.pdf grey.pdf
 pdfconv redraw       -scanner -skew 0.6 clean.pdf looks-scanned.pdf
 pdfconv from-archive book.cbz book.pdf
@@ -18,12 +19,89 @@ pdfconv formats
 pdf, err := convert.ToPDF(images, convert.Options{DPI: 300})
 err = convert.WriteTo(f, images, convert.Options{DPI: 300, Page: pdfkit.A4})
 pages, err := convert.FromPDF(pdf, convert.RasterOptions{DPI: 150, Format: "png"})
+svgs, err := convert.PDFToSVG(pdf, convert.SVGOptions{Pages: []int{1, 2}})
+err = convert.SVGArchive(w, svgs)                                    // page_1.svg, page_2.svg
 out, err := convert.Redraw(pdf, convert.RedrawOptions{Greyscale: true})
 pdf, err = convert.ArchiveToPDF(cbz, convert.Options{})
 err = convert.ToArchive(w, pdf, convert.RasterOptions{DPI: 150})
 pdf, err = convert.SVGToPDF(drawing, convert.Options{DPI: 72})       // vector, or drawn
 pdf, err = convert.SVGToPDFVector(drawing, convert.Options{})        // vector or nothing
 ```
+
+## `to-svg`: a PDF page as SVG
+
+```sh
+pdfconv to-svg [-pages 1,3,5-9] [-password-file f] [-o dir] in.pdf
+```
+
+⛔ **Passwords never go on the command line.** `-password` is gone from every
+verb (`to-svg`, `from-pdf`, `to-archive`, `redraw`): an argument is visible in
+`ps` and in the shell's history. `-password-file <path>` reads it from a file,
+`-password-file -` from standard input; one trailing newline is stripped. This
+is a **breaking CLI change** (a MINOR bump below v1).
+
+Built on `render.PageSVG`: paths, clips, images and transparency groups become
+SVG elements, text becomes **outlines** (so the file needs no font), and what
+SVG 1.1 cannot say — tiling and shading patterns, soft masks — is drawn by the
+pixel renderer and embedded as an `<image>` where it falls. Nothing the PDF
+says is copied into the output as text, and `render` checks every document
+against an allowlist before handing it over.
+
+**Naming follows BentoPDF's "PDF to SVG"**: one page is `name.svg`, several are
+`name_svg.zip` holding `page_N.svg`. The shape follows the pages *selected*, so
+`-pages 2` of a long file is a single `name.svg`. `-pages` is an addition:
+BentoPDF offers no page selection. Not matched: BentoPDF also takes several
+PDFs at once into one `pdf_to_svg.zip`; here one PDF is one run.
+
+⛔ **All or nothing**, as `from-pdf` and `to-archive` are. The first page that
+cannot be written stops the run, the error leads with the page number
+(`in.pdf: page 4: its clips nest deeper than an SVG can hold`), the exit status
+is 1, and **no file is left behind** — a zip with page 4 of 9 missing opens,
+counts and looks complete. Two refusals are expected on real files and stay
+reachable through `errors.Is`: `render.ErrSVGTooDeep` (clips nested past 64;
+[render#143](https://github.com/go-pdfkit/render/issues/143) tracks a raster
+fallback) and `render.ErrTimedOut` (ten seconds a page).
+
+The input is untrusted, and everything is bounded **before** it is spent:
+
+| bound | value | where |
+| --- | --- | --- |
+| pages in one run | 1000 (`convert.MaxSVGPages`) | before the first page is drawn, and before the list of pages is built; choose with `-pages` |
+| SVG of one page | 64 MiB (`convert.DefaultSVGPageBytes`) | the smaller of this and what the run has left, handed to `render`, so it is refused rather than built and then found large |
+| SVG of the whole run, hence the zip | 256 MiB (`convert.MaxSVGBytes`) | counted as each page is written |
+| time for the whole run | 5 min (`convert.MaxSVGRunTime`) | checked between pages |
+| time for one page | 10 s (`convert.DefaultSVGPageTime`) | the smaller of this and what the run has left |
+
+**Memory is one page, not the run.** The pages are streamed (`convert.StreamSVG`,
+`convert.NewSVGArchive`) into a temporary file in the output directory; the
+peak heap while 254 MiB of SVG went through was 41 MiB. `PDFToSVG` keeps every
+page in memory, up to 256 MiB, and is for callers that want them in memory.
+A page refused at its limit can still cost a large heap, driven by `render`
+parsing the content stream, not by the size of the SVG.
+
+⛔ **The time limit is a request, not a promise, while
+[render#142](https://github.com/go-pdfkit/render/issues/142) is open**: render's
+deadline is only checked now and then, and one page has been seen to overrun it
+about seventy times. The run's time is checked between pages, so it inherits
+that overrun within a page.
+
+The file is **never written through a link or over a file**: the output is made
+under a temporary name, then given its name with a hard link, which refuses a
+name that exists (a file, a directory, a symlink, even a dangling one); where
+hard links are not available, an exclusive create does the same. A refusal
+leaves nothing behind.
+
+Zip entry names are built from the page **number** and nothing else; no byte of
+the PDF reaches one. A page number given twice is refused, by the API as by the
+command.
+
+### Against MuPDF
+
+Allocations, exact, page 1 of three files (`GOMAXPROCS=1`): a 292 KB SVG took
+26 749 allocations and 11.2 MB; a 40 KB one 105 542 and 86.9 MB; a 6 KB one
+5 836 and 8.8 MB. **Timing against `mutool draw -F svg` was deferred**: the
+machine's one-minute load was 34 when it was measured, and a time taken there
+is not a time.
 
 ## ⛔ page10 comes after page2
 
