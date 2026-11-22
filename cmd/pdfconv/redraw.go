@@ -20,7 +20,7 @@ func redraw(args []string, out, errw io.Writer) error {
 	fs.SetOutput(errw)
 	dpi := fs.Float64("dpi", 150, "dots per inch to draw at, and the size the pages come back")
 	pages := fs.String("pages", "", "which pages, e.g. 1,3,5-9; empty means all")
-	password := fs.String("password", "", "password for an encrypted file")
+	getPassword := passwordFlag(fs)
 	title := fs.String("title", "", "title for the new document")
 	grey := fs.Bool("greyscale", false, "drop the colour")
 	invert := fs.Bool("invert", false, "turn light into dark")
@@ -38,16 +38,19 @@ func redraw(args []string, out, errw io.Writer) error {
 	if fs.NArg() != 2 {
 		return fmt.Errorf("redraw takes an input and an output: pdfconv redraw <in.pdf> <out.pdf>")
 	}
+	password, err := getPassword()
+	if err != nil {
+		return err
+	}
 
 	opt := convert.RedrawOptions{
-		RasterOptions: convert.RasterOptions{DPI: *dpi, Password: *password},
+		RasterOptions: convert.RasterOptions{DPI: *dpi, Password: password},
 		Title:         *title,
 		Greyscale:     *grey,
 		Invert:        *invert,
 		Brightness:    *bright,
 		Contrast:      *contrast,
 	}
-	var err error
 	if opt.Pages, err = parseRange(*pages); err != nil {
 		return err
 	}

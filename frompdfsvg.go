@@ -50,11 +50,14 @@ type SVGOptions struct {
 	// Password opens an encrypted file.
 	Password string
 
-	// MaxBytes bounds ONE page's SVG; zero leaves render's default of 64 MiB.
-	// The total is bounded by [MaxSVGBytes] whatever this says.
+	// MaxBytes bounds ONE page's SVG; zero is [DefaultSVGPageBytes], 64 MiB. A
+	// page is never granted more than the run has left of [MaxSVGBytes], which
+	// bounds the total whatever this says.
 	MaxBytes int
 
-	// MaxDuration bounds one page; zero is render's ten seconds.
+	// MaxDuration bounds one page; zero is [DefaultSVGPageTime], ten seconds. A
+	// page is never granted more than the run has left of [MaxSVGRunTime]. See
+	// [StreamSVG] on what the limit is worth while render#142 is open.
 	MaxDuration time.Duration
 
 	// RasterScale is the pixels per point of what SVG cannot say as a shape; zero
@@ -68,9 +71,29 @@ type SVGPage struct {
 	Data   []byte
 }
 
-// PDFToSVG writes the pages of a PDF as SVG, all or nothing.
+// DefaultSVGPageBytes and DefaultSVGPageTime are what ONE page may take when
+// the options say nothing: render's own defaults, spelled here because the run's
+// totals must never stand in for them.
+const (
+	DefaultSVGPageBytes = 64 << 20
+	DefaultSVGPageTime  = 10 * time.Second
+)
+
+// StreamSVG draws the selected pages one at a time and hands each to emit with
+// its number and how many pages were selected, in the order given. Its peak
+// memory is ONE page's SVG and what drawing it takes, whatever the page count;
+// emit owns the slice and may keep it.
 //
-// ⛔ The policy is the one FromPDF has: the first page that cannot be written
+// ⛔ If emit returns an error the run stops with it, unwrapped. A caller that
+// writes the pages must therefore treat any error as "discard what was
+// written": the policy is all or nothing, like [PDFToSVG].
+//
+// ⛔ The run's time is checked BETWEEN pages and handed to each page as its
+// limit, so a single page inherits whatever render's deadline does: while
+// go-pdfkit/render#142 is open that deadline can be overrun many times within
+// one page, and the ten seconds a page gets here are a request, not a promise.
+//
+// The policy is the one FromPDF has: the first page that cannot be written
 // stops the run, the error NAMES the page, and nothing is returned. A zip with
 // page 4 of 9 missing opens, counts and looks complete, which is the worst
 // shape a failure can take. Both [render.ErrSVGTooDeep] (issue render#143 tracks
@@ -81,21 +104,21 @@ type SVGPage struct {
 // count before the first page, each page's output by render, the total by
 // [MaxSVGBytes] (handed to render as the page's limit, so it is never allocated
 // and THEN found too large), and the time by [MaxSVGRunTime].
-func PDFToSVG(pdf []byte, opt SVGOptions) ([]SVGPage, error) {
+func StreamSVG(pdf []byte, opt SVGOptions, emit func(page, of int, svg []byte) error) error {
 	doc, err := open(pdf, opt.Password)
 	if err != nil {
-		return nil, fmt.Errorf("opening the PDF: %w", err)
+		return fmt.Errorf("opening the PDF: %w", err)
 	}
 	total := doc.PageCount()
 	if total == 0 {
-		return nil, fmt.Errorf("the PDF opened and holds no pages")
+		return fmt.Errorf("the PDF opened and holds no pages")
 	}
 	want := opt.Pages
 	if len(want) == 0 {
 		// ⛔ Checked BEFORE the list is made: the count is the file's own claim,
 		// and a slice of five million ints is built from nothing else.
 		if total > MaxSVGPages {
-			return nil, fmt.Errorf("the PDF has %d pages, past the %d allowed in one run: choose with -pages",
+			return fmt.Errorf("the PDF has %d pages, past the %d allowed in one run: choose with -pages",
 				total, MaxSVGPages)
 		}
 		want = make([]int, total)
@@ -104,56 +127,82 @@ func PDFToSVG(pdf []byte, opt SVGOptions) ([]SVGPage, error) {
 		}
 	}
 	if len(want) > MaxSVGPages {
-		return nil, fmt.Errorf("%d pages asked for, past the %d allowed in one run: choose with -pages",
+		return fmt.Errorf("%d pages asked for, past the %d allowed in one run: choose with -pages",
 			len(want), MaxSVGPages)
 	}
 	seen := make(map[int]bool, len(want))
 	for _, n := range want {
 		if n < 1 || n > total {
-			return nil, fmt.Errorf("page %d: this file has %d", n, total)
+			return fmt.Errorf("page %d: this file has %d", n, total)
 		}
 		if seen[n] {
-			return nil, fmt.Errorf("page %d is selected twice", n)
+			return fmt.Errorf("page %d is selected twice", n)
 		}
 		seen[n] = true
 	}
 
 	start := now()
 	budget := MaxSVGBytes
-	out := make([]SVGPage, 0, len(want))
 	for _, n := range want {
 		left := MaxSVGRunTime - now().Sub(start)
 		if left <= 0 {
-			return nil, fmt.Errorf("page %d: the run has used its %s and stops here: choose with -pages",
+			return fmt.Errorf("page %d: the run has used its %s and stops here: choose with -pages",
 				n, MaxSVGRunTime)
 		}
 		if budget <= 0 {
-			return nil, fmt.Errorf("page %d: the pages so far fill the %d bytes allowed in one run: choose with -pages",
+			return fmt.Errorf("page %d: the pages so far fill the %d bytes allowed in one run: choose with -pages",
 				n, MaxSVGBytes)
 		}
+		// ⛔ A page's share is the SMALLER of what it was granted (the option, or
+		// render's own default) and what the run has left. It used to be the
+		// whole run's budget when the option was zero, so one page could take 256
+		// MiB and five minutes, with a heap ten times its SVG.
 		perPage := opt.MaxBytes
-		if perPage <= 0 || perPage > budget {
+		if perPage <= 0 {
+			perPage = DefaultSVGPageBytes
+		}
+		if perPage > budget {
 			perPage = budget
 		}
 		dur := opt.MaxDuration
-		if dur <= 0 || dur > left {
+		if dur <= 0 {
+			dur = DefaultSVGPageTime
+		}
+		if dur > left {
 			dur = left
 		}
 		var buf bytes.Buffer
 		if err := pageSVG(doc, n, &buf, render.SVGOptions{
 			MaxBytes: perPage, RasterScale: opt.RasterScale, MaxDuration: dur,
 		}); err != nil {
-			return nil, svgPageError(n, err)
+			return svgPageError(n, err)
 		}
 		// ⛔ render counts the limit against the page's marks, not against the
 		// finished document: the wrapper around them is a hundred bytes or so
 		// that the limit does not see, and a thousand pages of it is not
 		// nothing. The ceiling here is on what is actually kept.
 		if buf.Len() > perPage {
-			return nil, svgPageError(n, render.ErrSVGTooLarge)
+			return svgPageError(n, render.ErrSVGTooLarge)
 		}
 		budget -= buf.Len()
-		out = append(out, SVGPage{Number: n, Data: buf.Bytes()})
+		if err := emit(n, len(want), buf.Bytes()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// PDFToSVG writes the pages of a PDF as SVG, all or nothing, holding every
+// page in memory: up to [MaxSVGBytes] of it. A caller that writes the pages
+// somewhere should use [StreamSVG], whose peak is one page.
+func PDFToSVG(pdf []byte, opt SVGOptions) ([]SVGPage, error) {
+	var out []SVGPage
+	err := StreamSVG(pdf, opt, func(n, _ int, svg []byte) error {
+		out = append(out, SVGPage{Number: n, Data: svg})
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
@@ -178,28 +227,58 @@ func svgPageError(n int, err error) error {
 // as BentoPDF's is not.
 func SVGEntryName(n int) string { return fmt.Sprintf("page_%d.svg", n) }
 
-// SVGArchive writes the pages into a ZIP as page_N.svg.
-func SVGArchive(w io.Writer, ps []SVGPage) error {
-	if len(ps) == 0 {
+// SVGArchiveWriter builds the ZIP a page at a time, so that the pages need not
+// be held together: the peak is the page being added and the zip writer's state.
+type SVGArchiveWriter struct {
+	zw   archiveWriter
+	seen map[int]bool
+	sum  int
+}
+
+// NewSVGArchive starts a ZIP of page_N.svg entries on w.
+func NewSVGArchive(w io.Writer) *SVGArchiveWriter {
+	return &SVGArchiveWriter{zw: newArchive(w), seen: map[int]bool{}}
+}
+
+// Add writes page n. It refuses a number already added (two entries of one name
+// read differently in every unzipper) and a total above [MaxSVGBytes], BEFORE
+// writing anything of the page.
+func (a *SVGArchiveWriter) Add(n int, data []byte) error {
+	if a.seen[n] {
+		return fmt.Errorf("page %d is in the archive twice", n)
+	}
+	if a.sum+len(data) > MaxSVGBytes {
+		return fmt.Errorf("the pages come to more than the %d bytes allowed", MaxSVGBytes)
+	}
+	a.seen[n] = true
+	a.sum += len(data)
+	name := SVGEntryName(n)
+	f, err := a.zw.Create(name)
+	if err == nil {
+		_, err = f.Write(data)
+	}
+	if err != nil {
+		return fmt.Errorf("writing %s: %w", name, err)
+	}
+	return nil
+}
+
+// Close finishes the archive. An archive with no page is refused: an empty one
+// is not a set of pictures.
+func (a *SVGArchiveWriter) Close() error {
+	if len(a.seen) == 0 {
 		return fmt.Errorf("no pages: an empty archive is not a set of pictures")
 	}
-	var sum int
+	return a.zw.Close()
+}
+
+// SVGArchive writes the pages into a ZIP as page_N.svg.
+func SVGArchive(w io.Writer, ps []SVGPage) error {
+	a := NewSVGArchive(w)
 	for _, p := range ps {
-		sum += len(p.Data)
-		if sum > MaxSVGBytes {
-			return fmt.Errorf("the pages come to more than the %d bytes allowed", MaxSVGBytes)
+		if err := a.Add(p.Number, p.Data); err != nil {
+			return err
 		}
 	}
-	zw := newArchive(w)
-	for _, p := range ps {
-		name := SVGEntryName(p.Number)
-		f, err := zw.Create(name)
-		if err == nil {
-			_, err = f.Write(p.Data)
-		}
-		if err != nil {
-			return fmt.Errorf("writing %s: %w", name, err)
-		}
-	}
-	return zw.Close()
+	return a.Close()
 }

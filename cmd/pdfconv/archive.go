@@ -130,9 +130,13 @@ func toArchive(args []string, out, errw io.Writer) error {
 	format := fs.String("format", "png", "png, jpeg, gif, bmp, tiff or webp")
 	pages := fs.String("pages", "", "which pages, e.g. 1,3,5-9; empty means all")
 	quality := fs.Int("quality", 85, "JPEG and WebP quality, 1-100; 100 is lossless WebP")
-	password := fs.String("password", "", "password for an encrypted file")
+	getPassword := passwordFlag(fs)
 	title := fs.String("title", "", "the book's name, for the ComicInfo.xml a reader shelves it by")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	password, err := getPassword()
+	if err != nil {
 		return err
 	}
 	if fs.NArg() != 2 {
@@ -154,7 +158,7 @@ func toArchive(args []string, out, errw io.Writer) error {
 	// there and dated and somebody will try.
 	var buf bytes.Buffer
 	if err := convert.ToArchive(&buf, src, convert.RasterOptions{
-		DPI: *dpi, Pages: want, Format: *format, Quality: *quality, Password: *password,
+		DPI: *dpi, Pages: want, Format: *format, Quality: *quality, Password: password,
 	}, *title); err != nil {
 		return fmt.Errorf("%s: %w", fs.Arg(0), err)
 	}

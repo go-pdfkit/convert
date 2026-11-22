@@ -139,7 +139,9 @@ func TestToSVGRefusesAndWritesNothing(t *testing.T) {
 		{"junk", []string{"to-svg", junk}, "junk.pdf"},
 		{"page too deep", []string{"to-svg", bad}, "page 2:"},
 		{"locked", []string{"to-svg", enc}, "opening the PDF"},
-		{"wrong password", []string{"to-svg", "-password", "no", enc}, "opening the PDF"},
+		{"wrong password", []string{"to-svg", "-password-file", pwFile(t, "no"), enc}, "opening the PDF"},
+		{"password file absent", []string{"to-svg", "-password-file", filepath.Join(t.TempDir(), "none"), enc}, "password file"},
+		{"the old flag is gone", []string{"to-svg", "-password", "pw", enc}, "not defined"},
 		{"page past the end", []string{"to-svg", "-pages", "9", good}, "this file has 2"},
 	} {
 		out := t.TempDir()
@@ -181,11 +183,82 @@ func TestToSVGRefusesAndWritesNothing(t *testing.T) {
 func TestToSVGOpensAnEncryptedFileWithItsPassword(t *testing.T) {
 	enc := pdfOn(t, "locked.pdf", &reader.Encryption{UserPassword: "pw", OwnerPassword: "ow"}, sq)
 	out := t.TempDir()
-	if err := run([]string{"to-svg", "-password", "pw", "-o", out, enc}); err != nil {
+	if err := run([]string{"to-svg", "-password-file", pwFile(t, "pw\n"), "-o", out, enc}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(out, "locked.svg")); err != nil {
 		t.Error(err)
+	}
+}
+
+// pwFile writes a password file holding exactly content.
+func pwFile(t *testing.T, content string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "pw")
+	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestThePasswordComesFromAFileOrStandardInputWithOneNewlineStripped(t *testing.T) {
+	defer func(r io.Reader) { stdin = r }(stdin)
+	for _, c := range []struct{ in, want string }{
+		{"pw", "pw"}, {"pw\n", "pw"}, {"pw\r\n", "pw"}, {"pw\n\n", "pw\n"}, {"p w\r", "p w\r"}, {"", ""},
+	} {
+		if got, err := readPassword(pwFile(t, c.in)); err != nil || got != c.want {
+			t.Errorf("file %q: %q, %v", c.in, got, err)
+		}
+		stdin = strings.NewReader(c.in)
+		if got, err := readPassword("-"); err != nil || got != c.want {
+			t.Errorf("stdin %q: %q, %v", c.in, got, err)
+		}
+	}
+	if got, err := readPassword(""); err != nil || got != "" {
+		t.Errorf("no file: %q, %v", got, err)
+	}
+	if got, err := readPassword(pwFile(t, strings.Repeat("x", maxPasswordFile))); err != nil || len(got) != maxPasswordFile {
+		t.Errorf("a file of exactly the limit: %d bytes, %v", len(got), err)
+	}
+	if _, err := readPassword(filepath.Join(t.TempDir(), "none")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("an absent file: %v", err)
+	}
+	if _, err := readPassword(pwFile(t, strings.Repeat("x", maxPasswordFile+1))); err == nil ||
+		!strings.Contains(err.Error(), "longer than") {
+		t.Errorf("an oversized file: %v", err)
+	}
+	if _, err := readPassword(t.TempDir()); err == nil || !strings.Contains(err.Error(), "password file") {
+		t.Errorf("a directory: %v", err)
+	}
+	stdin = failingReader{}
+	if _, err := readPassword("-"); err == nil || !strings.Contains(err.Error(), "password file -") {
+		t.Errorf("a pipe that fails: %v", err)
+	}
+}
+
+type failingReader struct{}
+
+func (failingReader) Read([]byte) (int, error) { return 0, errors.New("broken pipe") }
+
+func TestEveryVerbThatTakesAPasswordTakesItFromAFileAndNotFromArgv(t *testing.T) {
+	enc := pdfOn(t, "locked.pdf", &reader.Encryption{UserPassword: "pw", OwnerPassword: "ow"}, sq)
+	pw := pwFile(t, "pw\n")
+	for _, args := range [][]string{
+		{"from-pdf", "-password-file", pw, "-o", t.TempDir(), enc},
+		{"to-archive", "-password-file", pw, enc, filepath.Join(t.TempDir(), "a.cbz")},
+		{"redraw", "-password-file", pw, enc, filepath.Join(t.TempDir(), "r.pdf")},
+	} {
+		if err := run(args); err != nil {
+			t.Errorf("%s with a password file: %v", args[0], err)
+		}
+		bad := append([]string{args[0], "-password", "pw"}, args[3:]...)
+		if err := run(bad); err == nil || !strings.Contains(err.Error(), "not defined") {
+			t.Errorf("%s still takes -password: %v", args[0], err)
+		}
+		missing := append([]string{args[0], "-password-file", filepath.Join(t.TempDir(), "none")}, args[3:]...)
+		if err := run(missing); err == nil || !strings.Contains(err.Error(), "password file") {
+			t.Errorf("%s with an absent password file: %v", args[0], err)
+		}
 	}
 }
 
@@ -239,16 +312,149 @@ func TestToSVGTheRunsTotalCeilingStopsOnThePageThatCrossesIt(t *testing.T) {
 	}
 }
 
-func TestToSVGAnArchiveThatCannotBeBuiltIsReportedAndLeavesNothing(t *testing.T) {
-	in := pdfOn(t, "book.pdf", nil, sq, sq)
-	out := t.TempDir()
-	defer func(f func(io.Writer, []convert.SVGPage) error) { svgArchive = f }(svgArchive)
-	svgArchive = func(io.Writer, []convert.SVGPage) error { return errors.New("no room") }
-	err := run([]string{"to-svg", "-o", out, in})
-	if err == nil || !strings.Contains(err.Error(), "book.pdf: no room") {
-		t.Errorf("got %v", err)
+// full is a writer whose disk filled.
+type full struct{}
+
+func (full) Write([]byte) (int, error) { return 0, errors.New("no room") }
+
+func TestToSVGAWriteThatFailsIsReportedAndLeavesNothing(t *testing.T) {
+	for _, name := range []string{"one", "several"} {
+		in := pdfOn(t, "book.pdf", nil, sq, sq)
+		args := []string{"to-svg", "-pages", "1", "-o"}
+		if name == "several" {
+			args = []string{"to-svg", "-o"}
+		}
+		out := t.TempDir()
+		defer func(f func(io.Writer) io.Writer) { wrapOut = f }(wrapOut)
+		wrapOut = func(io.Writer) io.Writer { return full{} }
+		err := run(append(args, out, in))
+		if err == nil || !strings.Contains(err.Error(), "no room") {
+			t.Errorf("%s: got %v", name, err)
+		}
+		if es, _ := os.ReadDir(out); len(es) != 0 {
+			t.Errorf("%s: %d file(s) left behind", name, len(es))
+		}
 	}
-	if es, _ := os.ReadDir(out); len(es) != 0 {
-		t.Errorf("%d file(s) left behind", len(es))
+}
+
+func TestToSVGNeverWritesThroughALinkOrOverAFile(t *testing.T) {
+	in := pdfOn(t, "in.pdf", nil, sq)
+	out := t.TempDir()
+	victim := filepath.Join(t.TempDir(), "victim.txt")
+	if err := os.WriteFile(victim, []byte("precious\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(out, "in.svg")
+
+	// A symlink at the target, and a dangling one: neither is followed.
+	for _, dest := range []string{victim, filepath.Join(out, "nowhere")} {
+		if err := os.Symlink(dest, target); err != nil {
+			t.Fatal(err)
+		}
+		if err := run([]string{"to-svg", "-o", out, in}); err == nil || !strings.Contains(err.Error(), "not overwritten") {
+			t.Errorf("a symlink to %s: %v", dest, err)
+		}
+		os.Remove(target)
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "precious\n" {
+		t.Errorf("the file behind the link now holds %q", b)
+	}
+	if _, err := os.Lstat(filepath.Join(out, "nowhere")); err == nil {
+		t.Error("a dangling link was followed and its target created")
+	}
+
+	// An existing file is refused, and kept.
+	if err := os.WriteFile(target, []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"to-svg", "-o", out, in}); err == nil || !strings.Contains(err.Error(), "not overwritten") {
+		t.Errorf("an existing file: %v", err)
+	}
+	if b, _ := os.ReadFile(target); string(b) != "mine\n" {
+		t.Errorf("the existing file now holds %q", b)
+	}
+	// Only the file that was there: no temporary file survives a refusal.
+	if es, _ := os.ReadDir(out); len(es) != 1 {
+		t.Errorf("%d entries in the directory", len(es))
+	}
+}
+
+func TestToSVGWhereHardLinksAreRefusedItCreatesExclusively(t *testing.T) {
+	defer func(f func(string, string) error) { linkFile = f }(linkFile)
+	linkFile = func(string, string) error { return errors.New("operation not supported") }
+	in := pdfOn(t, "in.pdf", nil, sq)
+	out := t.TempDir()
+	if err := run([]string{"to-svg", "-o", out, in}); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(out, "in.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parses(t, b)
+	// The fallback refuses an existing name too, a symlink included.
+	victim := filepath.Join(t.TempDir(), "victim.txt")
+	if err := os.WriteFile(victim, []byte("precious\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(out, "in.svg"))
+	if err := os.Symlink(victim, filepath.Join(out, "in.svg")); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"to-svg", "-o", out, in}); err == nil || !strings.Contains(err.Error(), "not overwritten") {
+		t.Errorf("a symlink at the target: %v", err)
+	}
+	if b, _ := os.ReadFile(victim); string(b) != "precious\n" {
+		t.Errorf("the file behind the link now holds %q", b)
+	}
+	// A directory of that name is refused by the create, not as "exists" of a
+	// file.
+	os.Remove(filepath.Join(out, "in.svg"))
+	if err := os.Mkdir(filepath.Join(out, "in.svg"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"to-svg", "-o", out, in}); err == nil {
+		t.Error("a directory was overwritten")
+	}
+	// A name that cannot be created for another reason is that reason.
+	if err := publish(filepath.Join(out, "absent.tmp"), filepath.Join(out, "x")); err == nil ||
+		!strings.Contains(err.Error(), "absent.tmp") {
+		t.Error("a missing temporary file was published")
+	}
+	if err := publish(filepath.Join(out, "in.svg", ".."), filepath.Join(out, "no", "such", "x")); err == nil {
+		t.Error("an uncreatable name was published")
+	}
+}
+
+func TestToSVGAFallbackCopyThatFailsRemovesWhatItCreated(t *testing.T) {
+	defer func(f func(string, string) error) { linkFile = f }(linkFile)
+	linkFile = func(string, string) error { return errors.New("operation not supported") }
+	dir := t.TempDir()
+	// A directory as the source: opening works, reading fails.
+	src := filepath.Join(dir, "src")
+	if err := os.Mkdir(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "target")
+	if err := publish(src, target); err == nil {
+		t.Error("a failed copy was reported as published")
+	}
+	if _, err := os.Lstat(target); err == nil {
+		t.Error("the half-made target was left behind")
+	}
+}
+
+func TestToSVGADirectoryThatCannotBeWrittenInIsRefusedAndLeavesNothing(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes anywhere")
+	}
+	in := pdfOn(t, "in.pdf", nil, sq)
+	out := t.TempDir()
+	if err := os.Chmod(out, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(out, 0o700)
+	if err := run([]string{"to-svg", "-o", out, in}); err == nil || !strings.Contains(err.Error(), "permission") {
+		t.Errorf("got %v", err)
 	}
 }

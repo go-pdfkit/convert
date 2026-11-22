@@ -31,8 +31,14 @@ pdf, err = convert.SVGToPDFVector(drawing, convert.Options{})        // vector o
 ## `to-svg`: a PDF page as SVG
 
 ```sh
-pdfconv to-svg [-pages 1,3,5-9] [-password p] [-o dir] in.pdf
+pdfconv to-svg [-pages 1,3,5-9] [-password-file f] [-o dir] in.pdf
 ```
+
+⛔ **Passwords never go on the command line.** `-password` is gone from every
+verb (`to-svg`, `from-pdf`, `to-archive`, `redraw`): an argument is visible in
+`ps` and in the shell's history. `-password-file <path>` reads it from a file,
+`-password-file -` from standard input; one trailing newline is stripped. This
+is a **breaking CLI change** (a MINOR bump below v1).
 
 Built on `render.PageSVG`: paths, clips, images and transparency groups become
 SVG elements, text becomes **outlines** (so the file needs no font), and what
@@ -61,12 +67,33 @@ The input is untrusted, and everything is bounded **before** it is spent:
 | bound | value | where |
 | --- | --- | --- |
 | pages in one run | 1000 (`convert.MaxSVGPages`) | before the first page is drawn, and before the list of pages is built; choose with `-pages` |
-| SVG of one page | 64 MiB (render's default) | handed to `render`, so it is refused rather than built and then found large |
-| SVG of the whole run, hence the zip | 256 MiB (`convert.MaxSVGBytes`) | each page gets what is *left* as its limit |
-| time for the whole run | 5 min (`convert.MaxSVGRunTime`) | each page gets what is left, at most ten seconds |
+| SVG of one page | 64 MiB (`convert.DefaultSVGPageBytes`) | the smaller of this and what the run has left, handed to `render`, so it is refused rather than built and then found large |
+| SVG of the whole run, hence the zip | 256 MiB (`convert.MaxSVGBytes`) | counted as each page is written |
+| time for the whole run | 5 min (`convert.MaxSVGRunTime`) | checked between pages |
+| time for one page | 10 s (`convert.DefaultSVGPageTime`) | the smaller of this and what the run has left |
+
+**Memory is one page, not the run.** The pages are streamed (`convert.StreamSVG`,
+`convert.NewSVGArchive`) into a temporary file in the output directory; the
+peak heap while 254 MiB of SVG went through was 41 MiB. `PDFToSVG` keeps every
+page in memory, up to 256 MiB, and is for callers that want them in memory.
+A page refused at its limit can still cost a large heap, driven by `render`
+parsing the content stream, not by the size of the SVG.
+
+⛔ **The time limit is a request, not a promise, while
+[render#142](https://github.com/go-pdfkit/render/issues/142) is open**: render's
+deadline is only checked now and then, and one page has been seen to overrun it
+about seventy times. The run's time is checked between pages, so it inherits
+that overrun within a page.
+
+The file is **never written through a link or over a file**: the output is made
+under a temporary name, then given its name with a hard link, which refuses a
+name that exists (a file, a directory, a symlink, even a dangling one); where
+hard links are not available, an exclusive create does the same. A refusal
+leaves nothing behind.
 
 Zip entry names are built from the page **number** and nothing else; no byte of
-the PDF reaches one.
+the PDF reaches one. A page number given twice is refused, by the API as by the
+command.
 
 ### Against MuPDF
 

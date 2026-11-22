@@ -9,8 +9,10 @@ import (
 	"encoding/xml"
 	"errors"
 	"io"
+	"runtime"
 	"runtime/debug"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -244,13 +246,58 @@ func TestTheOptionsReachRender(t *testing.T) {
 	if got.MaxBytes != 1<<20 || got.MaxDuration != time.Second || got.RasterScale != 3 {
 		t.Errorf("render saw %+v", got)
 	}
-	// Left alone, the caps are the run's own and not "unlimited".
+	// ⛔ Left alone, a page gets render's per-page defaults, NOT the run's
+	// totals: one page used to be granted all 256 MiB and five minutes.
 	if _, err := PDFToSVG(pdf, SVGOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if got.MaxBytes != MaxSVGBytes || got.MaxDuration > MaxSVGRunTime ||
-		got.MaxDuration < MaxSVGRunTime-time.Second {
+	if got.MaxBytes != DefaultSVGPageBytes || got.MaxDuration != DefaultSVGPageTime {
 		t.Errorf("defaults reached render as %+v", got)
+	}
+	// An option larger than what the run has left is cut to what is left.
+	defer func(b int, d time.Duration) { MaxSVGBytes, MaxSVGRunTime = b, d }(MaxSVGBytes, MaxSVGRunTime)
+	MaxSVGBytes, MaxSVGRunTime = 1<<20, 3*time.Second
+	if _, err := PDFToSVG(pdf, SVGOptions{MaxBytes: 1 << 30, MaxDuration: time.Hour}); err != nil {
+		t.Fatal(err)
+	}
+	if got.MaxBytes != 1<<20 || got.MaxDuration > 3*time.Second || got.MaxDuration < 2*time.Second {
+		t.Errorf("an oversized grant reached render as %+v", got)
+	}
+	// And so is the default, when the run has less than it.
+	if _, err := PDFToSVG(pdf, SVGOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got.MaxBytes != 1<<20 || got.MaxDuration > 3*time.Second || got.MaxDuration < 2*time.Second {
+		t.Errorf("the default beside a small run reached render as %+v", got)
+	}
+}
+
+func TestStreamSVGHandsOverOnePageAtATimeAndStopsOnTheSinksError(t *testing.T) {
+	pdf := buildPDF(t, nil, squarePage, squarePage, squarePage)
+	var got [][2]int
+	err := StreamSVG(pdf, SVGOptions{Pages: []int{3, 1}}, func(n, of int, svg []byte) error {
+		if len(svg) == 0 {
+			t.Error("an empty page")
+		}
+		got = append(got, [2]int{n, of})
+		return nil
+	})
+	if err != nil || len(got) != 2 || got[0] != [2]int{3, 2} || got[1] != [2]int{1, 2} {
+		t.Errorf("got %v and %v", got, err)
+	}
+	stop := errors.New("sink full")
+	calls := 0
+	err = StreamSVG(pdf, SVGOptions{}, func(int, int, []byte) error { calls++; return stop })
+	if err != stop || calls != 1 {
+		t.Errorf("the sink's refusal: %v after %d call(s)", err, calls)
+	}
+}
+
+func TestAnArchiveRefusesAPageNumberTwice(t *testing.T) {
+	var buf bytes.Buffer
+	err := SVGArchive(&buf, []SVGPage{{Number: 1, Data: []byte("a")}, {Number: 1, Data: []byte("b")}})
+	if err == nil || !strings.Contains(err.Error(), "twice") {
+		t.Errorf("got %v", err)
 	}
 }
 
@@ -443,5 +490,80 @@ func TestAPageThatAsksForMillionsOfMarksIsRefusedAtTheLimit(t *testing.T) {
 	}
 	if len(ps[0].Data) < 10<<20 {
 		t.Fatalf("the unlimited page is %d bytes: the fixture is not a bomb", len(ps[0].Data))
+	}
+}
+
+// peakHeap runs f while sampling HeapInuse and returns the highest value seen,
+// in MiB. A sample can miss a spike, so a ceiling built on it has to leave room
+// above what is measured, and the bomb below is sized so that holding the pages
+// would be far past it, not just past it.
+func peakHeap(f func()) float64 {
+	runtime.GC()
+	var stop atomic.Bool
+	done := make(chan uint64)
+	go func() {
+		var m runtime.MemStats
+		var top uint64
+		for !stop.Load() {
+			runtime.ReadMemStats(&m)
+			if m.HeapInuse > top {
+				top = m.HeapInuse
+			}
+			time.Sleep(2 * time.Millisecond)
+		}
+		done <- top
+	}()
+	f()
+	stop.Store(true)
+	return float64(<-done) / (1 << 20)
+}
+
+// ⛔ A thousand pages that all point at one content stream: a small file that
+// asks for a thousand pages of SVG, each of megabytes. The ceiling on the run
+// is 256 MiB of SVG, so a run that HOLDS its pages peaks past 256 MiB; one that
+// streams peaks at about one page. The assertion is on the heap, not only on the
+// refusal, because a refusal that arrives after the memory was spent is the
+// defect.
+func TestAThousandHeavyPagesStreamInOnePagesWorthOfHeap(t *testing.T) {
+	debug.SetMemoryLimit(1 << 30)
+	defer debug.SetMemoryLimit(-1)
+	defer func(v int) { MaxSVGBytes = v }(MaxSVGBytes)
+	MaxSVGBytes = 128 << 20
+	w := reader.NewWriter("1.7")
+	pagesRef := w.Reserve()
+	cs := w.Add(&reader.Stream{Dict: reader.Dict{}, Raw: []byte(strings.Repeat("1 1 2 2 re f ", 50_000))})
+	kids := make(reader.Array, 1000)
+	for i := range kids {
+		kids[i] = w.Add(reader.Dict{"Type": reader.Name("Page"), "Parent": pagesRef, "Contents": cs})
+	}
+	w.Put(pagesRef, reader.Dict{"Type": reader.Name("Pages"), "Kids": kids,
+		"Count":    reader.Integer(len(kids)),
+		"MediaBox": reader.Array{reader.Integer(0), reader.Integer(0), reader.Integer(100), reader.Integer(100)}})
+	root := w.Add(reader.Dict{"Type": reader.Name("Catalog"), "Pages": pagesRef})
+	pdf, err := w.Finish(reader.Dict{"Root": root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sum, pages int
+	var got error
+	peak := peakHeap(func() {
+		got = StreamSVG(pdf, SVGOptions{}, func(_, _ int, svg []byte) error {
+			sum += len(svg)
+			pages++
+			return nil
+		})
+	})
+	if got == nil || !errors.Is(got, render.ErrSVGTooLarge) {
+		t.Fatalf("the run was not refused at its total: %v", got)
+	}
+	if sum < MaxSVGBytes*3/4 || pages < 10 {
+		t.Fatalf("only %d bytes in %d pages went through: the fixture is not heavy enough to mean anything", sum, pages)
+	}
+	t.Logf("%d pages, %.0f MiB of SVG streamed, peak heap %.0f MiB", pages, float64(sum)/(1<<20), peak)
+	// Measured 41 MiB (43 under -race) for 254 MiB streamed; the run is capped at
+	// 128 MiB here to keep the test short, and a run that held its pages would
+	// peak past that cap.
+	if peak > 96 {
+		t.Errorf("streaming %.0f MiB of SVG peaked at %.0f MiB of heap, past the 96 MiB stated ceiling", float64(sum)/(1<<20), peak)
 	}
 }
