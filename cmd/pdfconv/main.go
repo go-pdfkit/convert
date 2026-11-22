@@ -47,6 +47,8 @@ func runTo(args []string, out, errw io.Writer) error {
 		return toPDF(args[1:], out, errw)
 	case "from-pdf":
 		return fromPDF(args[1:], out, errw)
+	case "to-svg":
+		return toSVG(args[1:], out, errw)
 	case "redraw":
 		return redraw(args[1:], out, errw)
 	case "from-archive":
@@ -81,6 +83,9 @@ pdfconv — pictures to a PDF, and a PDF back to pictures.
               pdfconv to-pdf [-dpi n] [-page a4] [-margin pt] [-title s] -o <out.pdf> <in> [in …]
   from-pdf  draw each page and write it out
               pdfconv from-pdf [-dpi n] [-format png] [-pages 1-3] [-quality n] [-password p] -o <dir> <in.pdf>
+  to-svg    write each page as SVG: one page is name.svg, several are
+            name_svg.zip holding page_N.svg; all or nothing
+              pdfconv to-svg [-pages 1-3] [-password p] [-o <dir>] <in.pdf>
   redraw    draw each page, change the pixels, and lay them back in a PDF
               pdfconv redraw [-greyscale] [-invert] [-brightness n] [-contrast n]
                              [-background #rrggbb] [-scanner] [-dpi n] <in.pdf> <out.pdf>
