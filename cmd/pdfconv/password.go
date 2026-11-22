@@ -29,6 +29,20 @@ func passwordFlag(fs *flag.FlagSet) func() (string, error) {
 	return func() (string, error) { return readPassword(*file) }
 }
 
+// statOpened is a seam: the swap of a name between the Stat and the open cannot
+// be provoked on demand.
+var statOpened = func(f *os.File) (os.FileInfo, error) { return f.Stat() }
+
+func mustBeRegular(path string, fi os.FileInfo, err error) error {
+	if err != nil {
+		return fmt.Errorf("password file: %w", err)
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("password file %s: not a regular file (use - for standard input)", path)
+	}
+	return nil
+}
+
 // readPassword reads the password in path ("-" is standard input), without one
 // trailing newline. An empty path means no password.
 func readPassword(path string) (string, error) {
@@ -37,11 +51,23 @@ func readPassword(path string) (string, error) {
 	}
 	var r io.Reader = stdin
 	if path != "-" {
+		// ⛔ Only a regular file: open(2) on a FIFO with no writer blocks
+		// forever, before any read could be bounded. So look BEFORE opening
+		// (Stat does not block), and look again at what was opened, in case
+		// the name was swapped in between.
+		fi, err := os.Stat(path)
+		if err := mustBeRegular(path, fi, err); err != nil {
+			return "", err
+		}
 		f, err := os.Open(path)
 		if err != nil {
 			return "", fmt.Errorf("password file: %w", err)
 		}
 		defer f.Close()
+		fi, err = statOpened(f)
+		if err := mustBeRegular(path, fi, err); err != nil {
+			return "", err
+		}
 		r = f
 	}
 	b, err := io.ReadAll(io.LimitReader(r, maxPasswordFile+1))
